@@ -2,7 +2,6 @@ package hw02unpackstring
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -10,82 +9,54 @@ import (
 var ErrInvalidString = errors.New("invalid string")
 
 func Unpack(input string) (string, error) {
-	var result strings.Builder
-	// make a slice from the string to determine
-	// a last symbol in loop
-	list := []rune(input)
+	var builder strings.Builder
+	builder.Grow(len(input) * 2)
+	err := unpack([]rune(input), &builder)
+	if err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
 
-	// mark char as escaped between iterations
-	var charIsEscaped bool
+func unpack(runes []rune, builder *strings.Builder) error {
+	var allowStartingWithInt bool
 
-	for i, currentRune := range list {
-		currentChar := string(currentRune)
-		currentCharIsDigit := unicode.IsDigit(currentRune)
-
-		isLastRune := i == len(list)-1
-
-		currentCharIsEscape := currentChar == "\\"
-		lastCharIsEscape := isLastRune && currentCharIsEscape
-
-		//   ↓
-		// aa\
-		if lastCharIsEscape {
-			return "", ErrInvalidString
-		}
-
-		//     ↓ ↓
-		// qwe\\\5
-		if charIsEscaped {
-			// now it is a letter
-			currentCharIsEscape = false
-			// now it is a letter
-			currentCharIsDigit = false
-			// reset for next iteration
-			charIsEscaped = false
-		}
-
-		//    ↓
-		// qwe\\5
-		if currentCharIsEscape {
-			// set for next iteration
-			charIsEscaped = true
-			continue
-		}
-
-		var nextRune rune
-		if !isLastRune {
-			nextRune = list[i+1]
-		}
-		nextChar := string(nextRune)
-		nextCharIsDigit := unicode.IsDigit(nextRune)
-
-		currentAndNextCharsAreDigit := currentCharIsDigit && nextCharIsDigit
-		firstCharIsDigit := i == 0 && currentCharIsDigit
-
-		// ↓     ↓      ↓
-		// 1a || 12 || a11a
-		if firstCharIsDigit || currentAndNextCharsAreDigit {
-			return "", ErrInvalidString
-		}
-
-		// ↓
-		// a2
-		if nextCharIsDigit {
-			repeatCount, _ := strconv.Atoi(nextChar)
-			result.WriteString(strings.Repeat(currentChar, repeatCount))
-			continue
-		}
-
-		//  ↓
-		// a3a
-		if currentCharIsDigit {
-			continue
-		}
-
-		// ↓
-		// aa
-		result.WriteString(currentChar)
+	if len(runes) == 0 {
+		return nil
 	}
 
-	return result.String(), nil
+	// escaping.
+	if runes[0] == '\\' {
+		allowStartingWithInt = true
+		runes = runes[1:]
+	}
+
+	// if after escaping str is empty it is invalid string.
+	if len(runes) == 0 {
+		return ErrInvalidString
+	}
+
+	// if first letter is digit but not escaped digit it is invalid string.
+	if unicode.IsDigit(runes[0]) && !allowStartingWithInt {
+		return ErrInvalidString
+	}
+
+	// if it is the last rune.
+	if len(runes) == 1 {
+		builder.WriteRune(runes[0])
+		return nil
+	}
+
+	// repeat rune.
+	if unicode.IsDigit(runes[1]) {
+		repeat := int(runes[1] - '0')
+		for i := 0; i < repeat; i++ {
+			builder.WriteRune(runes[0])
+		}
+		return unpack(runes[2:], builder)
+	}
+
+	// just put rune into result without repeating.
+	builder.WriteRune(runes[0])
+	return unpack(runes[1:], builder)
 }
